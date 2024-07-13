@@ -1,5 +1,7 @@
 package clustermanager
 
+import "github.com/juju/juju/cloudconfig/cloudinit"
+
 // Node is the structure used to define a node
 type Node struct {
 	Name             string    `json:"name"`
@@ -21,6 +23,19 @@ type Cluster struct {
 	CloudInitFile     string `json:"cloud_init_file"`
 	NodeCIDR          string `json:"node_cidr"`
 	KubernetesVersion string `json:"kubernetes_version"`
+
+	MasterTemplate NodeTemplate `json:"-"`
+	WorkerTemplate NodeTemplate `json:"-"`
+	SSHKeyName     string
+	MastersCount   int
+}
+
+type NodeTemplate struct {
+	ServerType  string
+	Image       string
+	CloudInit   cloudinit.CloudConfig
+	DataCenters []string
+	Labels      map[string]string
 }
 
 // NodeCommand is the structure used to define acommand to execute on a node

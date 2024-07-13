@@ -4,20 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"github.com/go-kit/kit/log/term"
+	"github.com/gosuri/uiprogress"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/xetys/hetzner-kube/pkg/clustermanager"
+	"github.com/xetys/hetzner-kube/types"
+
 	"log"
 	"math/rand"
 	"os"
 	"strings"
 	"time"
-
-	"github.com/go-kit/kit/log/term"
-	"github.com/gosuri/uiprogress"
-	"github.com/hetznercloud/hcloud-go/hcloud"
-	"github.com/xetys/hetzner-kube/pkg/clustermanager"
 )
 
-// Provider contains provider information
+// Provider contains providers information
 type Provider struct {
 	client        *hcloud.Client
 	context       context.Context
@@ -25,8 +25,9 @@ type Provider struct {
 	clusterName   string
 	cloudInitFile string
 	wait          bool
-	token         string
+	token         string //TODO Delete
 	nodeCidr      string
+	SSHKeyName    string
 }
 
 // NewHetznerProvider returns an instance of hetzner.Provider
@@ -42,44 +43,66 @@ func NewHetznerProvider(context context.Context, client *hcloud.Client, cluster 
 	}
 }
 
+const appName = "hetzner-kube"
+
+func NewHetznerProvider2(context context.Context, htoken string, sshKeyName string) *Provider {
+	return &Provider{
+		client:        hcloud.NewClient(hcloud.WithToken(htoken), hcloud.WithApplication(appName, "0.0.1")),
+		context:       context,
+		token:         "TODO DELETE",
+		nodeCidr:      "10.0.1.0/24",
+		clusterName:   "TODO DELETE",
+		cloudInitFile: "TODO DELETE",
+		//nodes:         cluster.Nodes,
+		SSHKeyName: sshKeyName,
+	}
+}
+
+const ()
+
 // CreateNodes creates hetzner nodes
-func (provider *Provider) CreateNodes(suffix string, template clustermanager.Node, datacenters []string, count int, offset int) ([]clustermanager.Node, error) {
-	sshKey, _, err := provider.client.SSHKey.Get(provider.context, template.SSHKeyName)
+//
+// Deprecated:
+func (provider *Provider) CreateNode(suffix types.NodeRole, template clustermanager.NodeTemplate, count int, offset int) ([]clustermanager.Node, error) {
+	sshKey, _, err := provider.client.SSHKey.Get(provider.context, provider.SSHKeyName)
 
 	if err != nil {
 		return nil, err
 	}
 
 	if sshKey == nil {
-		return nil, fmt.Errorf("we got some problem with the SSH-Key '%s', chances are you are in the wrong context", template.SSHKeyName)
+		return nil, fmt.Errorf("we got some problem with the SSH-Key '%s', chances are you are in the wrong context", provider.SSHKeyName)
 	}
 
 	serverNameTemplate := fmt.Sprintf("%s-%s-@idx", provider.clusterName, suffix)
 	serverOptsTemplate := hcloud.ServerCreateOpts{
 		Name: serverNameTemplate,
 		ServerType: &hcloud.ServerType{
-			Name: template.Type,
+			Name: template.ServerType,
 		},
 		Image: &hcloud.Image{
-			Name: "ubuntu-20.04",
+			Name: template.Image,
 		},
+		UserData: template.CloudInit,
 	}
 
-	if len(provider.cloudInitFile) > 0 {
-		buf, err := ioutil.ReadFile(provider.cloudInitFile)
-		if err == nil {
-			serverOptsTemplate.UserData = string(buf)
-		}
-
-	}
+	serverOptsTemplate.Labels = make(map[string]string)
+	serverOptsTemplate.Labels[types.ClusterNameLabel] = provider.clusterName
+	if suffix == "master" {
+		serverOptsTemplate.Labels[types.ClusterRoleLabel] = string(types.MasterNodeRole)
+	} else {
+		serverOptsTemplate.Labels[types.ClusterRoleLabel] = string(types.WorkerNodeRole)
+	} //TODO switch with etcd
 
 	serverOptsTemplate.SSHKeys = append(serverOptsTemplate.SSHKeys, sshKey)
 
-	datacentersCount := len(datacenters)
+	datacentersCount := len(template.DataCenters)
 
 	//shuffle datacenters to make it more random
 	rand.Seed(time.Now().UnixNano())
-	rand.Shuffle(datacentersCount, func(i, j int) { datacenters[i], datacenters[j] = datacenters[j], datacenters[i] })
+	rand.Shuffle(datacentersCount, func(i, j int) {
+		template.DataCenters[i], template.DataCenters[j] = template.DataCenters[j], template.DataCenters[i]
+	})
 
 	var nodes []clustermanager.Node
 	for i := 1; i <= count; i++ {
@@ -87,7 +110,7 @@ func (provider *Provider) CreateNodes(suffix string, template clustermanager.Nod
 		nodeNumber := i + offset
 		serverOpts.Name = strings.Replace(serverNameTemplate, "@idx", fmt.Sprintf("%.02d", nodeNumber), 1)
 		serverOpts.Datacenter = &hcloud.Datacenter{
-			Name: datacenters[i%datacentersCount],
+			Name: template.DataCenters[i%datacentersCount],
 		}
 
 		// create
@@ -102,12 +125,13 @@ func (provider *Provider) CreateNodes(suffix string, template clustermanager.Nod
 
 		// render private IP address
 		privateIPLastBlock := nodeNumber
-		if !template.IsEtcd {
-			privateIPLastBlock += 10
-			if !template.IsMaster {
-				privateIPLastBlock += 10
-			}
-		}
+		//FIXME
+		//if !template.IsEtcd {
+		//	privateIPLastBlock += 10
+		//	if !template.IsMaster {
+		//		privateIPLastBlock += 10
+		//	}
+		//}
 		cidrPrefix, err := clustermanager.PrivateIPPrefix(provider.nodeCidr)
 		if err != nil {
 			return nil, err
@@ -118,11 +142,11 @@ func (provider *Provider) CreateNodes(suffix string, template clustermanager.Nod
 		node := clustermanager.Node{
 			Name:             serverOpts.Name,
 			Type:             serverOpts.ServerType.Name,
-			IsMaster:         template.IsMaster,
-			IsEtcd:           template.IsEtcd,
+			IsMaster:         suffix == "master", //FIXME
+			IsEtcd:           false,              //FIXME
 			IPAddress:        ipAddress,
 			PrivateIPAddress: privateIPAddress,
-			SSHKeyName:       template.SSHKeyName,
+			SSHKeyName:       provider.SSHKeyName,
 		}
 		nodes = append(nodes, node)
 		provider.nodes = append(provider.nodes, node)
@@ -131,22 +155,109 @@ func (provider *Provider) CreateNodes(suffix string, template clustermanager.Nod
 	return nodes, nil
 }
 
+func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate clustermanager.NodeTemplate) (clustermanager.Node, error) {
+	clusterName, isFound := nodeTemplate.Labels[types.ClusterNameLabel]
+	if !isFound {
+		return clustermanager.Node{}, errors.New("clusterName label is empty")
+	}
+
+	role, isFound := nodeTemplate.Labels[types.ClusterRoleLabel]
+	if !isFound {
+		return clustermanager.Node{}, errors.New("role label is empty")
+	}
+
+	sshKey, _, err := provider.client.SSHKey.Get(provider.context, provider.SSHKeyName)
+	if err != nil {
+		return clustermanager.Node{}, err
+	}
+
+	cloudConfRender, err := nodeTemplate.CloudInit.RenderYAML()
+	if err != nil {
+		return clustermanager.Node{}, err
+	}
+
+	nodes, err := provider.GetAllNodes2(ctx, types.MasterNodeRole)
+	nodeNumber := len(nodes)
+	serverOptsTemplate := hcloud.ServerCreateOpts{
+		Name: fmt.Sprintf("%s-%s-%d", clusterName, role, nodeNumber),
+		ServerType: &hcloud.ServerType{
+			Name: nodeTemplate.ServerType,
+		},
+		Image: &hcloud.Image{
+			Name: nodeTemplate.Image,
+		},
+		UserData: string(cloudConfRender),
+		Labels:   nodeTemplate.Labels,
+		SSHKeys:  []*hcloud.SSHKey{sshKey},
+	}
+
+	//shuffle datacenters to make it more random
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(nodeTemplate.DataCenters), func(i, j int) {
+		nodeTemplate.DataCenters[i], nodeTemplate.DataCenters[j] = nodeTemplate.DataCenters[j], nodeTemplate.DataCenters[i]
+	})
+
+	res, err := provider.runCreateServer(&serverOptsTemplate)
+	if err != nil {
+		return clustermanager.Node{}, err
+	}
+	if res == nil {
+		return clustermanager.Node{}, errors.New("result from hetzner api is nil")
+	}
+
+	ipAddress := res.Server.PublicNet.IPv4.IP.String()
+	log.Printf("Created node '%s' with IP %s", res.Server.Name, ipAddress)
+
+	// render private IP address
+	privateIPLastBlock := nodeNumber
+	//FIXME
+	//if !template.IsEtcd {
+	//	privateIPLastBlock += 10
+	//	if !template.IsMaster {
+	//		privateIPLastBlock += 10
+	//	}
+	//}
+	cidrPrefix, err := clustermanager.PrivateIPPrefix(provider.nodeCidr)
+	if err != nil {
+		return clustermanager.Node{}, err
+	}
+
+	privateIPAddress := fmt.Sprintf("%s.%d", cidrPrefix, privateIPLastBlock)
+
+	node := clustermanager.Node{
+		Name:             res.Server.Name,
+		Type:             res.Server.ServerType.Name,
+		IsMaster:         serverOptsTemplate.Labels[types.ClusterRoleLabel] == "master", //FIXME
+		IsEtcd:           false,                                                         //FIXME
+		IPAddress:        ipAddress,
+		PrivateIPAddress: privateIPAddress,
+		SSHKeyName:       provider.SSHKeyName,
+	}
+
+	return node, nil
+}
+
 // CreateEtcdNodes creates nodes with type 'etcd'
 func (provider *Provider) CreateEtcdNodes(sshKeyName string, masterServerType string, datacenters []string, count int) ([]clustermanager.Node, error) {
-	template := clustermanager.Node{SSHKeyName: sshKeyName, IsEtcd: true, Type: masterServerType}
-	return provider.CreateNodes("etcd", template, datacenters, count, 0)
+	//template := clustermanager.Node{SSHKeyName: sshKeyName, IsEtcd: true, Type: masterServerType}
+	//return providers.CreateNode("etcd", template, datacenters, count, 0, sshKeyName)
+	//FIXME
+	return nil, errors.New("fixme not implemented")
 }
 
+var tempDatacenters = []string{"nbg1-dc3"} //FIXME
 // CreateMasterNodes creates nodes with type 'master'
-func (provider *Provider) CreateMasterNodes(sshKeyName string, masterServerType string, datacenters []string, count int, isEtcd bool) ([]clustermanager.Node, error) {
-	template := clustermanager.Node{SSHKeyName: sshKeyName, IsMaster: true, Type: masterServerType, IsEtcd: isEtcd}
-	return provider.CreateNodes("master", template, datacenters, count, 0)
+// Deprecated:
+func (provider *Provider) CreateMasterNodes(params clustermanager.Cluster, isEtcd bool) ([]clustermanager.Node, error) {
+	//return providers.CreateNode("master", params.MasterTemplate, tempDatacenters, params.MastersCount, 0)
+	return nil, nil
 }
 
-// CreateWorkerNodes create new worker node on provider
-func (provider *Provider) CreateWorkerNodes(sshKeyName string, workerServerType string, datacenters []string, count int, offset int) ([]clustermanager.Node, error) {
-	template := clustermanager.Node{SSHKeyName: sshKeyName, IsMaster: false, Type: workerServerType}
-	return provider.CreateNodes("worker", template, datacenters, count, offset)
+// CreateWorkerNodes create new worker node on providers
+// Deprecated:
+func (provider *Provider) CreateWorkerNodes(params clustermanager.Cluster, count int, offset int) ([]clustermanager.Node, error) {
+	//return providers.CreateNode("worker", params.WorkerTemplate, tempDatacenters, count, offset, params.SSHKeyName)
+	return nil, nil
 }
 
 // GetAllNodes retrieves all nodes
@@ -154,7 +265,26 @@ func (provider *Provider) GetAllNodes() []clustermanager.Node {
 	return provider.nodes
 }
 
-// SetNodes set list of cluster nodes for this provider
+func (provider *Provider) GetAllNodes2(ctx context.Context, filter types.NodeRole) ([]clustermanager.Node, error) {
+	allServers, err := provider.client.Server.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var nodes []clustermanager.Node
+	for _, s := range allServers {
+		role := s.Labels[types.ClusterRoleLabel]
+		if role != string(filter) && role != string(types.AnyNodeRole) {
+			continue
+		}
+
+		nodes = append(nodes, clustermanager.Node{Name: s.Name})
+	}
+
+	return nodes, nil
+}
+
+// SetNodes set list of cluster nodes for this providers
 func (provider *Provider) SetNodes(nodes []clustermanager.Node) {
 	provider.nodes = nodes
 }

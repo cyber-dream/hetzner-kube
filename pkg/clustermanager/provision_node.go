@@ -193,8 +193,9 @@ func (provisioner *NodeProvisioner) prepareKubernetes() error {
 		return err
 	}
 
-	// Repository doesn't have Ubuntu 20.04 (focal), but `kubernetes-xenial` works
-	err = provisioner.communicator.WriteFile(provisioner.node, "/etc/apt/sources.list.d/kubernetes.list", `deb http://apt.kubernetes.io/ kubernetes-xenial main`, AllRead)
+	//FIXME hardcoded release
+	// Repository doesn't have Ubuntu 20.04 (focal), but `kubernetes-jammy` works
+	err = provisioner.communicator.WriteFile(provisioner.node, "/etc/apt/sources.list.d/kubernetes.list", `deb http://apt.kubernetes.io/ kubernetes-jammy main`, AllRead)
 	if err != nil {
 		return err
 	}

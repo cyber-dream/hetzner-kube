@@ -1,9 +1,9 @@
 package phases
 
 import (
-	"fmt"
+	"errors"
 	"github.com/xetys/hetzner-kube/pkg/clustermanager"
-	"log"
+	"log/slog"
 )
 
 // ProvisionNodesPhase defines the phase which install all the tools for each node
@@ -27,15 +27,15 @@ func (phase *ProvisionNodesPhase) ShouldRun() bool {
 func (phase *ProvisionNodesPhase) Run() error {
 	cluster := phase.clusterManager.Cluster()
 
-	tries := 0
-	for err := phase.clusterManager.ProvisionNodes(cluster.Nodes); err != nil; {
-		if tries < 3 {
-			fmt.Print(err)
-			tries++
-		} else {
-			log.Fatal(err)
+	for i := 0; i < 3; i++ {
+		err := phase.clusterManager.ProvisionNodes(cluster.Nodes)
+		if err != nil {
+			slog.Error(err.Error())
+			continue
 		}
+
+		return nil
 	}
 
-	return nil
+	return errors.New("max tries count (3) excited on NodeProvisioning")
 }

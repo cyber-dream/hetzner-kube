@@ -18,9 +18,9 @@ import (
 
 // SSHKey represents a keypair with the paths to the keys
 type SSHKey struct {
-	Name           string `json:"name"`
-	PrivateKeyPath string `json:"private_key_path"`
-	PublicKeyPath  string `json:"public_key_path"`
+	Name           string `json:"name" yaml:"name"`
+	PrivateKeyPath string `json:"private_key_path" yaml:"privateKeyPath"`
+	PublicKeyPath  string `json:"public_key_path" yaml:"publicKeyPath"`
 }
 
 // SSHCommunicator implements NodeCommunicator as a SSH client
