@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"github.com/leaanthony/clir"
 	"github.com/xetys/hetzner-kube/cluster"
+	"github.com/xetys/hetzner-kube/pkg/clustermanager"
+	"github.com/xetys/hetzner-kube/types"
 )
 
 type GetGenericFlag struct {
@@ -40,8 +42,11 @@ func main() {
 	clusterCreationFlags := CreateClusterFlags{}
 	createCluster.AddFlags(&clusterCreationFlags)
 	createCluster.Action(func() error {
-		err := cluster.RunClusterCreate(cluster.ClusterCreationConfig{
-			Name: clusterCreationFlags.Name,
+		err := cluster.RunClusterCreate(types.ClusterConfig{
+			MasterNode:    types.MasterNodeConfig{},
+			ClusterName:   clusterCreationFlags.Name,
+			SSHKey:        clustermanager.SSHKey{},
+			HetznerApiKey: "",
 		})
 
 		return err

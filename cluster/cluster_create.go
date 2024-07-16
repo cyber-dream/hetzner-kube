@@ -10,6 +10,7 @@ import (
 	"github.com/xetys/hetzner-kube/pkg"
 	"github.com/xetys/hetzner-kube/pkg/cluster2"
 	"github.com/xetys/hetzner-kube/pkg/clustermanager"
+	"github.com/xetys/hetzner-kube/types"
 	"log"
 	"net"
 	"os"
@@ -45,7 +46,7 @@ type ClusterCreationConfig struct {
 }
 
 // RunClusterCreate executes the cluster creation
-func RunClusterCreate(config ClusterCreationConfig) error {
+func RunClusterCreate(inConfig types.ClusterConfig) error {
 	//TODO check exists clusters
 	ctx := context.Background()
 	workerCount /*, _ */ := 1 //cmd.Flags().GetInt("worker-count")
@@ -129,12 +130,12 @@ func RunClusterCreate(config ClusterCreationConfig) error {
 	//err = sshClient.(*clustermanager.SSHCommunicator).CapturePassphrase(sshKeyName)
 	//FatalOnError(err)
 
-	c, err := appconf.GetConfig("pipa")
-	if err != nil {
-		return err
-	}
+	//c, err := appconf.GetConfig("pipa")
+	//if err != nil {
+	//	return err
+	//}
 
-	newCluster, err := cluster2.CreateNewCluster(ctx, c)
+	newCluster, err := cluster2.CreateNewCluster(ctx, inConfig)
 	if err != nil {
 		return err
 	}
