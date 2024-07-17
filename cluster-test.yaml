@@ -1,0 +1,19 @@
+"kind": Cluster
+"metadata":
+#  name: "K8S"
+
+"nodes-control":
+  "ssh-key-name": "k8s"
+
+"spec":
+  "nodes":
+    "master":
+      "replicas": 1
+      "type": "cax11"
+      "image": "ubuntu-24.04"
+      "dataCenters": ["nbg1-dc3"]
+    "worker":
+      "replicas": 3
+      "type": "cax11"
+      "image": "ubuntu-24.04"
+      "dataCenters": [ "nbg1-dc3" ]

@@ -207,6 +207,9 @@ func (sshComm *SSHCommunicator) findPrivateKeyByName(name string) (int, *SSHKey)
 
 // CapturePassphrase asks the user to enter a private keys passphrase
 func (sshComm *SSHCommunicator) CapturePassphrase(sshKeyName string) error {
+	if sshKeyName == "" {
+		return fmt.Errorf("ssh key name is empty")
+	}
 	index, privateKey := sshComm.findPrivateKeyByName(sshKeyName)
 	if index < 0 {
 		return fmt.Errorf("could not find SSH key '%s'", sshKeyName)

@@ -38,7 +38,7 @@ type NodeTemplate struct {
 	Labels      map[string]string
 }
 
-// NodeCommand is the structure used to define acommand to execute on a node
+// NodeCommand is the structure used to define a command to execute on a node
 type NodeCommand struct {
 	EventName string
 	Command   string

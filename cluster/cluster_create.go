@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/spf13/cobra"
-	"github.com/xetys/hetzner-kube/appconf"
 	"github.com/xetys/hetzner-kube/pkg"
 	"github.com/xetys/hetzner-kube/pkg/cluster2"
 	"github.com/xetys/hetzner-kube/pkg/clustermanager"
@@ -41,33 +40,32 @@ This tool supports these levels of kubernetes HA:
 	//Run:     RunClusterCreate,
 }
 
-type ClusterCreationConfig struct {
-	Name string
-}
-
 // RunClusterCreate executes the cluster creation
 func RunClusterCreate(inConfig types.ClusterConfig) error {
 	//TODO check exists clusters
 	ctx := context.Background()
-	workerCount /*, _ */ := 1 //cmd.Flags().GetInt("worker-count")
-	masterCount /*, _ */ := 1 //cmd.Flags().GetInt("master-count")
-	etcdCount := 0
-	haEnabled := false //, _ := cmd.Flags().GetBool("ha-enabled")
+	//workerCount /*, _ */ := 1 //cmd.Flags().GetInt("worker-count")
+	//masterCount /*, _ */ := 1 //cmd.Flags().GetInt("master-count")
+	//etcdCount := 0
+	//haEnabled := false //, _ := cmd.Flags().GetBool("ha-enabled")
 	//if !haEnabled {
 	//	masterCount = 1
 	//}
-	isolatedEtcd /*, _ */ := false //cmd.Flags().GetBool("isolated-etcd")
+	//isolatedEtcd /*, _ */ := false //cmd.Flags().GetBool("isolated-etcd")
 	//if isolatedEtcd {
 	//	etcdCount, _ = cmd.Flags().GetInt("etcd-count")
 	//}
 	//debug /*, _*/ := false //cmd.Flags().GetBool("debug")
 
-	clusterName := randomName()
+	if inConfig.Metadata.Name == "" {
+		inConfig.Metadata.Name = randomName()
+	}
+	//clusterName :=  randomName()
 	//if name, _ := cmd.Flags().GetString("name"); name != "" {
 	//	clusterName = name
 	//}
 
-	log.Printf("Creating new cluster\n\nNAME:%s\nMASTERS: %d\nWORKERS: %d\nETCD NODES: %d\nHA: %t\nISOLATED ETCD: %t", clusterName, masterCount, workerCount, etcdCount, haEnabled, isolatedEtcd)
+	//log.Printf("Creating new cluster\n\nNAME:%s\nMASTERS: %d\nWORKERS: %d\nETCD NODES: %d\nHA: %t\nISOLATED ETCD: %t", clusterName, masterCount, workerCount, etcdCount, haEnabled, isolatedEtcd)
 
 	//sshKeyName := "k8s" //, _ := cmd.Flags().GetString("ssh-key")
 	//masterServerType, _ := cmd.Flags().GetString("master-server-type")
@@ -140,10 +138,11 @@ func RunClusterCreate(inConfig types.ClusterConfig) error {
 		return err
 	}
 
-	err = appconf.SaveConfig(newCluster.Config)
-	if err != nil {
-		return err
-	}
+	_ = newCluster
+	//err = appconf.SaveConfig(newCluster.Config)
+	//if err != nil {
+	//	return err
+	//}
 
 	////saveCluster(&cluster)
 	//renderProgressBars(&cluster, coordinator)

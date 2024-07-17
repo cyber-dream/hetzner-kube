@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"github.com/leaanthony/clir"
 	"github.com/xetys/hetzner-kube/cluster"
-	"github.com/xetys/hetzner-kube/pkg/clustermanager"
 	"github.com/xetys/hetzner-kube/types"
+	"gopkg.in/yaml.v3"
+	"os"
+	"strings"
 )
 
 type GetGenericFlag struct {
@@ -14,7 +16,7 @@ type GetGenericFlag struct {
 
 type CreateClusterFlags struct {
 	Name string `pos:"1" description:"Override random name of new cluster"`
-	//Age  int    `pos:"2" description:"The age of the person" default:"20"`
+	F    string `pos:"2" description:"Path to a config file"`
 }
 
 func main() {
@@ -38,18 +40,47 @@ func main() {
 	})
 
 	create := cli.NewSubCommand("create", "create an object")
+
 	createCluster := create.NewSubCommand("cluster", "create a cluster")
 	clusterCreationFlags := CreateClusterFlags{}
 	createCluster.AddFlags(&clusterCreationFlags)
 	createCluster.Action(func() error {
-		err := cluster.RunClusterCreate(types.ClusterConfig{
-			MasterNode:    types.MasterNodeConfig{},
-			ClusterName:   clusterCreationFlags.Name,
-			SSHKey:        clustermanager.SSHKey{},
-			HetznerApiKey: "",
-		})
+		var clusterConf types.ClusterConfig
+		stat, err := os.Stat(clusterCreationFlags.F)
+		if err == nil {
+			if !stat.IsDir() {
+				file, err := os.ReadFile(clusterCreationFlags.F)
+				if err != nil {
+					fmt.Printf("error in reading file %s: %s\n", clusterCreationFlags.F, err)
+					return err
+				}
+
+				var rawConf map[string]interface{}
+				err = yaml.Unmarshal(file, &rawConf)
+				val, isOk := rawConf["kind"]
+				if !isOk {
+					fmt.Printf("error in parsing file %s: %s\n", clusterCreationFlags.F, "config kind not defined")
+				}
+				strVal, isOk := val.(string)
+				if !isOk {
+					fmt.Printf("error in parsing file %s: %s\n", clusterCreationFlags.F, "config kind is not a string")
+				}
+				if strings.ToLower(strVal) != "cluster" {
+					fmt.Printf("error in parsing file %s: %s\n", clusterCreationFlags.F, "config kind is not a cluster")
+				}
+
+				err = yaml.Unmarshal(file, &clusterConf)
+				if err != nil {
+					fmt.Printf("error in parsing file %s: %s\n", clusterCreationFlags.F, err)
+					return err
+				}
+			}
+		}
+
+		err = cluster.RunClusterCreate(clusterConf)
 
 		return err
+
 	})
 	if err := cli.Run(); err != nil {
 		fmt.Printf("Error encountered: %v\n", err)

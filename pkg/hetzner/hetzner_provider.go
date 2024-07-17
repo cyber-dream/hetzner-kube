@@ -1,6 +1,7 @@
 package hetzner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,9 +10,10 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/xetys/hetzner-kube/pkg/clustermanager"
 	"github.com/xetys/hetzner-kube/types"
-
+	"golang.org/x/crypto/ssh"
 	"log"
 	"math/rand"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -45,16 +47,16 @@ func NewHetznerProvider(context context.Context, client *hcloud.Client, cluster 
 
 const appName = "hetzner-kube"
 
-func NewHetznerProvider2(context context.Context, htoken string, sshKeyName string) *Provider {
+func NewHetznerProvider2(context context.Context, htoken string, clusterName string) *Provider {
 	return &Provider{
 		client:        hcloud.NewClient(hcloud.WithToken(htoken), hcloud.WithApplication(appName, "0.0.1")),
 		context:       context,
-		token:         "TODO DELETE",
+		token:         htoken,
 		nodeCidr:      "10.0.1.0/24",
-		clusterName:   "TODO DELETE",
+		clusterName:   clusterName,
 		cloudInitFile: "TODO DELETE",
 		//nodes:         cluster.Nodes,
-		SSHKeyName: sshKeyName,
+		SSHKeyName: clusterName, //TODO Delete this field, uses in SSHClient
 	}
 }
 
@@ -83,7 +85,7 @@ func (provider *Provider) CreateNode(suffix types.NodeRole, template clustermana
 		Image: &hcloud.Image{
 			Name: template.Image,
 		},
-		UserData: template.CloudInit,
+		//UserData: template.CloudInit,FIXME
 	}
 
 	serverOptsTemplate.Labels = make(map[string]string)
@@ -155,12 +157,7 @@ func (provider *Provider) CreateNode(suffix types.NodeRole, template clustermana
 	return nodes, nil
 }
 
-func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate clustermanager.NodeTemplate) (clustermanager.Node, error) {
-	clusterName, isFound := nodeTemplate.Labels[types.ClusterNameLabel]
-	if !isFound {
-		return clustermanager.Node{}, errors.New("clusterName label is empty")
-	}
-
+func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate types.NodeConfig) (clustermanager.Node, error) {
 	role, isFound := nodeTemplate.Labels[types.ClusterRoleLabel]
 	if !isFound {
 		return clustermanager.Node{}, errors.New("role label is empty")
@@ -171,6 +168,8 @@ func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate clusterm
 		return clustermanager.Node{}, err
 	}
 
+	nodeTemplate.CloudInit.AddRunCmd("touch /tmp/hetzner-kube.unlock")
+
 	cloudConfRender, err := nodeTemplate.CloudInit.RenderYAML()
 	if err != nil {
 		return clustermanager.Node{}, err
@@ -179,9 +178,9 @@ func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate clusterm
 	nodes, err := provider.GetAllNodes2(ctx, types.MasterNodeRole)
 	nodeNumber := len(nodes)
 	serverOptsTemplate := hcloud.ServerCreateOpts{
-		Name: fmt.Sprintf("%s-%s-%d", clusterName, role, nodeNumber),
+		Name: fmt.Sprintf("%s-%s-%d", provider.clusterName, role, nodeNumber),
 		ServerType: &hcloud.ServerType{
-			Name: nodeTemplate.ServerType,
+			Name: nodeTemplate.Type,
 		},
 		Image: &hcloud.Image{
 			Name: nodeTemplate.Image,
@@ -425,4 +424,44 @@ func (provider *Provider) actionProgress(action *hcloud.Action) error {
 	} else {
 		return <-errCh
 	}
+}
+
+func (provider *Provider) RawCli() *hcloud.Client {
+	return provider.client
+}
+
+func (provider *Provider) AddSSHKey(ctx context.Context, name string, publicKey []byte) error {
+	opts := hcloud.SSHKeyCreateOpts{
+		Name:      name,
+		PublicKey: string(publicKey),
+	}
+
+	sshKey, res, err := provider.client.SSHKey.Create(ctx, opts)
+
+	if res.StatusCode == http.StatusConflict {
+		pkey, _, _, _, err := ssh.ParseAuthorizedKey(publicKey)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		sshKeyHetzner, _, err := provider.client.SSHKey.Get(ctx, name)
+		if err != nil {
+			return err
+		}
+
+		hetznerPkey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(sshKeyHetzner.PublicKey))
+		if err != nil {
+			return err
+		}
+
+		if bytes.Equal(pkey.Marshal(), hetznerPkey.Marshal()) {
+			fmt.Printf("SSH key does already exist on hetzner as '%s'\n", sshKeyHetzner.Name)
+		}
+	} else if err != nil {
+		return err
+	} else {
+		fmt.Printf("SSH key %s(%d) created\n", sshKey.Name, sshKey.ID)
+	}
+
+	return nil
 }

@@ -10,16 +10,16 @@ import (
 )
 
 type vault struct {
-	Configs map[uuid.UUID]types.ClusterConfig `yaml:"configs"`
+	Configs map[uuid.UUID]types.ClusterConfigOld `yaml:"configs"`
 }
 
-func GetConfig(name string) (types.ClusterConfig, error) {
+func GetConfig(name string) (types.ClusterConfigOld, error) {
 	v, err := loadVault()
 	if err != nil {
-		return types.ClusterConfig{}, err
+		return types.ClusterConfigOld{}, err
 	}
 
-	var config types.ClusterConfig
+	var config types.ClusterConfigOld
 	for _, clusterConfig := range v.Configs {
 		if clusterConfig.ClusterName != name {
 			continue
@@ -35,7 +35,7 @@ func GetConfig(name string) (types.ClusterConfig, error) {
 const confPath = "./"
 const confName = "config.yaml"
 
-func SaveConfig(config types.ClusterConfig) error {
+func SaveConfig(config types.ClusterConfigOld) error {
 	v, err := loadVault()
 	v.Configs[config.GetUUID()] = config
 
