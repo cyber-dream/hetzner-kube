@@ -4,16 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/xetys/hetzner-kube/pkg/clustermanager"
 	"github.com/xetys/hetzner-kube/types"
 	"path/filepath"
 	"time"
 )
 
-func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig) (clustermanager.Node, error) {
-	nodeTemplate.Labels[types.ClusterNameLabel] = c.Config.Metadata.Name
-	nodeTemplate.Labels[types.ClusterRoleLabel] = string(types.MasterNodeRole)
-
+func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig, networks []*hcloud.Network) (clustermanager.Node, error) {
 	sshClient := clustermanager.NewSSHCommunicator([]clustermanager.SSHKey{
 		{
 			Name:           c.Config.Metadata.Name,
@@ -27,7 +25,7 @@ func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig)
 		return clustermanager.Node{}, err
 	}
 
-	node, err := c.provider.CreateNode2(ctx, nodeTemplate)
+	node, err := c.provider.CreateNode2(ctx, nodeTemplate, networks)
 	if err != nil {
 		return clustermanager.Node{}, err
 	}
@@ -50,8 +48,7 @@ func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig)
 			fmt.Printf("cloud init complete with time: %d seconds\n", t.Second())
 			break
 		}
-		//println(err.Error())
-		println()
+
 		counter++
 		print(fmt.Sprintf("...%ds", int(tick.Seconds())*counter))
 		time.Sleep(tick)

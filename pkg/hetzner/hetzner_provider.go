@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -157,7 +158,7 @@ func (provider *Provider) CreateNode(suffix types.NodeRole, template clustermana
 	return nodes, nil
 }
 
-func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate types.NodeConfig) (clustermanager.Node, error) {
+func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate types.NodeConfig, networks []*hcloud.Network) (clustermanager.Node, error) {
 	role, isFound := nodeTemplate.Labels[types.ClusterRoleLabel]
 	if !isFound {
 		return clustermanager.Node{}, errors.New("role label is empty")
@@ -185,6 +186,7 @@ func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate types.No
 		Image: &hcloud.Image{
 			Name: nodeTemplate.Image,
 		},
+		Networks: networks,
 		UserData: string(cloudConfRender),
 		Labels:   nodeTemplate.Labels,
 		SSHKeys:  []*hcloud.SSHKey{sshKey},
@@ -464,4 +466,26 @@ func (provider *Provider) AddSSHKey(ctx context.Context, name string, publicKey 
 	}
 
 	return nil
+}
+
+func (provider *Provider) CreateNetwork(ctx context.Context, clusterName string, ipRange *net.IPNet) (*hcloud.Network, error) {
+	network, _, err := provider.client.Network.Create(ctx, hcloud.NetworkCreateOpts{
+		Name:    fmt.Sprintf("%s-generated", clusterName),
+		IPRange: ipRange,
+		Subnets: []hcloud.NetworkSubnet{
+			{
+				Type:        "cloud",
+				IPRange:     ipRange,
+				NetworkZone: hcloud.NetworkZoneEUCentral, //FIXME Hardcoded
+				Gateway:     nil,
+				VSwitchID:   0,
+			},
+		},
+		Labels: map[string]string{
+			types.ClusterNameLabel: clusterName,
+		},
+		ExposeRoutesToVSwitch: false,
+	})
+
+	return network, err
 }
