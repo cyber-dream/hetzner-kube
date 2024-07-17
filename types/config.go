@@ -2,6 +2,7 @@ package types
 
 import (
 	"github.com/google/uuid"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/juju/juju/cloudconfig/cloudinit"
 	"github.com/xetys/hetzner-kube/pkg/clustermanager"
 )
@@ -51,4 +52,5 @@ type NodeConfig struct {
 	DataCenters []string              `yaml:"dataCenters"`
 	Labels      map[string]string     `yaml:"-"`
 	CloudInit   cloudinit.CloudConfig `yaml:"-"`
+	Networks    []*hcloud.Network     `yaml:"-"`
 }

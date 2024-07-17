@@ -1,6 +1,9 @@
 package clustermanager
 
-import "github.com/juju/juju/cloudconfig/cloudinit"
+import (
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/juju/juju/cloudconfig/cloudinit"
+)
 
 // Node is the structure used to define a node
 type Node struct {
@@ -36,6 +39,7 @@ type NodeTemplate struct {
 	CloudInit   cloudinit.CloudConfig
 	DataCenters []string
 	Labels      map[string]string
+	Networks    []*hcloud.Network
 }
 
 // NodeCommand is the structure used to define a command to execute on a node

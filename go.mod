@@ -6,6 +6,7 @@ require (
 	github.com/go-kit/kit v0.9.0
 	github.com/google/uuid v1.6.0
 	github.com/gosuri/uiprogress v0.0.0-20170224063937-d0567a9d84a1
+	github.com/hedzr/progressbar v1.1.8
 	github.com/hetznercloud/hcloud-go/v2 v2.10.2
 	github.com/jedib0t/go-pretty/v6 v6.5.9
 	github.com/juju/juju v0.0.0-20240712142001-20b7d944acc9
@@ -13,11 +14,14 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/viper v1.17.0
+	github.com/vbauerster/mpb/v8 v8.7.3
 	golang.org/x/crypto v0.25.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
+	github.com/VividCortex/ewma v1.2.0 // indirect
+	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
@@ -60,7 +64,7 @@ require (
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
-	github.com/rivo/uniseg v0.4.4 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect

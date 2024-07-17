@@ -8,7 +8,7 @@ const (
 	ClusterIsolatedEtcdLabel     = "isolated-etcd"
 	ClusterCIDRLabel             = "cidr"
 
-	//hetzner nodes roles
+	// Hetzner nodes roles
 	MasterNodeRole NodeRole = "master"
 	WorkerNodeRole NodeRole = "worker"
 	EtcdNodeRole   NodeRole = "etcd"

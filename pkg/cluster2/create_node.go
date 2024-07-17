@@ -4,18 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/xetys/hetzner-kube/pkg/clustermanager"
 	"github.com/xetys/hetzner-kube/types"
 	"path/filepath"
 	"time"
 )
 
-func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig, networks []*hcloud.Network) (clustermanager.Node, error) {
+func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig) (clustermanager.Node, error) {
 	sshClient := clustermanager.NewSSHCommunicator([]clustermanager.SSHKey{
 		{
 			Name:           c.Config.Metadata.Name,
-			PrivateKeyPath: filepath.Join("./.ssh/", c.Config.Metadata.Name),
+			PrivateKeyPath: filepath.Join("./.ssh/", c.Config.Metadata.Name), //FIXME Hardcoded
 			PublicKeyPath:  filepath.Join("./.ssh/", fmt.Sprintf("%s.pub", c.Config.Metadata.Name)),
 		},
 	}, false)
@@ -25,13 +24,15 @@ func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig,
 		return clustermanager.Node{}, err
 	}
 
-	node, err := c.provider.CreateNode2(ctx, nodeTemplate, networks)
+	nodeTemplate.CloudInit.AddRunCmd("touch /tmp/hetzner-kube.unlock")
+
+	node, err := c.provider.CreateNode2(ctx, nodeTemplate)
 	if err != nil {
 		return clustermanager.Node{}, err
 	}
 
-	fmt.Printf("wait for cloud-init completion with deadline 300s")
-	const tick = time.Second * 10
+	fmt.Printf("wait for cloud-init completion with deadline 300s\n")
+	const tick = time.Second * 5
 	ctxDeadline, cancelFunc := context.WithTimeout(ctx, time.Minute*5)
 	defer cancelFunc()
 
@@ -46,7 +47,7 @@ func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig,
 
 		_, err := sshClient.RunCmd(node, "[ -f /tmp/hetzner-kube.unlock ]")
 		if err == nil {
-			fmt.Printf("cloud init complete with time: %d seconds\n", t.Second())
+			fmt.Printf("\ncloud init complete with time: %d seconds\n", t.Second())
 			break
 		}
 
@@ -55,10 +56,23 @@ func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig,
 		time.Sleep(tick)
 	}
 
-	_, err = sshClient.RunCmd(node, "rm /tmp/hetzner-kube.unlock")
-	if err != nil {
-		fmt.Printf("WARN! can't delete cloud-init lock file")
+	commands := []string{
+		`kubeadm init`,
+		`mkdir -p $HOME/.kube`,
+		`sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config`,
+		`sudo chown $(id -u):$(id -g) $HOME/.kube/config`,
+		`kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml`,
 	}
 
+	for _, command := range commands {
+		println("executing: ", command)
+		data, err := sshClient.RunCmd(node, command)
+		if err != nil {
+			fmt.Printf(err.Error())
+			break
+		}
+
+		println(data)
+	}
 	return clustermanager.Node{}, nil
 }

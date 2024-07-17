@@ -66,7 +66,7 @@ const ()
 // CreateNodes creates hetzner nodes
 //
 // Deprecated:
-func (provider *Provider) CreateNode(suffix types.NodeRole, template clustermanager.NodeTemplate, count int, offset int) ([]clustermanager.Node, error) {
+func (provider *Provider) CreateNode(ctx context.Context, suffix types.NodeRole, template clustermanager.NodeTemplate, count int, offset int) ([]clustermanager.Node, error) {
 	sshKey, _, err := provider.client.SSHKey.Get(provider.context, provider.SSHKeyName)
 
 	if err != nil {
@@ -117,7 +117,7 @@ func (provider *Provider) CreateNode(suffix types.NodeRole, template clustermana
 		}
 
 		// create
-		server, err := provider.runCreateServer(&serverOpts)
+		server, err := provider.runCreateServer(ctx, &serverOpts)
 
 		if err != nil {
 			return nil, err
@@ -158,7 +158,13 @@ func (provider *Provider) CreateNode(suffix types.NodeRole, template clustermana
 	return nodes, nil
 }
 
-func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate types.NodeConfig, networks []*hcloud.Network) (clustermanager.Node, error) {
+func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate types.NodeConfig) (clustermanager.Node, error) {
+	//all, err := provider.client.Image.All(ctx)
+	//if err != nil {
+	//	return clustermanager.Node{}, err
+	//}
+	//_ = all
+
 	role, isFound := nodeTemplate.Labels[types.ClusterRoleLabel]
 	if !isFound {
 		return clustermanager.Node{}, errors.New("role label is empty")
@@ -169,14 +175,12 @@ func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate types.No
 		return clustermanager.Node{}, err
 	}
 
-	nodeTemplate.CloudInit.AddRunCmd("touch /tmp/hetzner-kube.unlock")
-
 	cloudConfRender, err := nodeTemplate.CloudInit.RenderYAML()
 	if err != nil {
 		return clustermanager.Node{}, err
 	}
 
-	nodes, err := provider.GetAllNodes2(ctx, types.MasterNodeRole)
+	nodes, err := provider.GetAllNodes2(ctx, types.MasterNodeRole) //FIXME hardcoded
 	nodeNumber := len(nodes)
 	serverOptsTemplate := hcloud.ServerCreateOpts{
 		Name: fmt.Sprintf("%s-%s-%d", provider.clusterName, role, nodeNumber),
@@ -186,7 +190,10 @@ func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate types.No
 		Image: &hcloud.Image{
 			Name: nodeTemplate.Image,
 		},
-		Networks: networks,
+		Location: &hcloud.Location{
+			Name: "nbg1",
+		},
+		Networks: nodeTemplate.Networks,
 		UserData: string(cloudConfRender),
 		Labels:   nodeTemplate.Labels,
 		SSHKeys:  []*hcloud.SSHKey{sshKey},
@@ -198,7 +205,7 @@ func (provider *Provider) CreateNode2(ctx context.Context, nodeTemplate types.No
 		nodeTemplate.DataCenters[i], nodeTemplate.DataCenters[j] = nodeTemplate.DataCenters[j], nodeTemplate.DataCenters[i]
 	})
 
-	res, err := provider.runCreateServer(&serverOptsTemplate)
+	res, err := provider.runCreateServer(ctx, &serverOptsTemplate)
 	if err != nil {
 		return clustermanager.Node{}, err
 	}
@@ -365,39 +372,30 @@ func (provider *Provider) filterNodes(filter nodeFilter) []clustermanager.Node {
 	return nodes
 }
 
-func (provider *Provider) runCreateServer(opts *hcloud.ServerCreateOpts) (*hcloud.ServerCreateResult, error) {
-	log.Printf("creating server '%s'...", opts.Name)
-	server, _, err := provider.client.Server.GetByName(provider.context, opts.Name)
+func (provider *Provider) runCreateServer(ctx context.Context, opts *hcloud.ServerCreateOpts) (*hcloud.ServerCreateResult, error) {
+	//log.Printf("creating server '%s'...", opts.Name)
+	server, _, err := provider.client.Server.GetByName(ctx, opts.Name)
 	if err != nil {
 		return nil, err
 	}
-	if server == nil {
-		result, _, err := provider.client.Server.Create(provider.context, *opts)
-		if err != nil {
-			if err.(hcloud.Error).Code == "uniqueness_error" {
-				server, _, err := provider.client.Server.Get(provider.context, opts.Name)
+	if server != nil {
+		return nil, errors.New("servers name collision")
+	}
 
-				if err != nil {
-					return nil, err
-				}
+	serverCreateResult, _, err := provider.client.Server.Create(ctx, *opts)
+	if err != nil {
+		return nil, err
+	}
 
-				return &hcloud.ServerCreateResult{Server: server}, nil
-			}
-
-			return nil, err
-		}
-
-		if err := provider.actionProgress(result.Action); err != nil {
-			return nil, err
-		}
-
-		provider.wait = true
-
-		return &result, nil
+	actions := append(serverCreateResult.NextActions, serverCreateResult.Action)
+	err = provider.client.Action.WaitFor(ctx, actions...)
+	if err != nil {
+		//_ = provider.c.deleteServer(server) TODO
+		return nil, fmt.Errorf("failed to start server %s error: %v", server.Name, err)
 	}
 
 	log.Printf("loading server '%s'...", opts.Name)
-	return &hcloud.ServerCreateResult{Server: server}, nil
+	return &hcloud.ServerCreateResult{Server: serverCreateResult.Server}, nil
 }
 
 func (provider *Provider) actionProgress(action *hcloud.Action) error {
@@ -488,4 +486,44 @@ func (provider *Provider) CreateNetwork(ctx context.Context, clusterName string,
 	})
 
 	return network, err
+}
+
+func (provider *Provider) CreateFirewall(ctx context.Context, name string, ports []string) (*hcloud.Firewall, error) {
+	_, tempIpNet, err := net.ParseCIDR("195.201.229.4/32") //FIXME hardcoded ip
+	if err != nil {
+		return nil, err
+	}
+
+	opts := hcloud.FirewallCreateOpts{
+		Name: fmt.Sprintf("%s-generated", name),
+		Labels: map[string]string{
+			types.ClusterNameLabel: name,
+		},
+
+		ApplyTo: []hcloud.FirewallResource{
+			{
+				Type:   hcloud.FirewallResourceTypeLabelSelector,
+				Server: nil,
+				LabelSelector: &hcloud.FirewallResourceLabelSelector{
+					Selector: "cluster-role",
+				},
+			},
+		},
+	}
+
+	for _, port := range ports {
+		p := port
+		opts.Rules = append(opts.Rules, hcloud.FirewallRule{
+			Direction:      hcloud.FirewallRuleDirectionIn,
+			SourceIPs:      []net.IPNet{*tempIpNet}, //[]net.IPNet{*all1, *all2},
+			DestinationIPs: nil,
+			Protocol:       hcloud.FirewallRuleProtocolTCP,
+			Port:           &p,
+			Description:    nil,
+		})
+	}
+
+	create, _, err := provider.client.Firewall.Create(ctx, opts)
+
+	return create.Firewall, err
 }
