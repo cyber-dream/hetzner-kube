@@ -35,6 +35,7 @@ func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig,
 	ctxDeadline, cancelFunc := context.WithTimeout(ctx, time.Minute*5)
 	defer cancelFunc()
 
+	//FIXME Deadline not works
 	var counter int
 	var t time.Time
 	var isOk bool
