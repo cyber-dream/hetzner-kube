@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/leaanthony/clir"
 	"github.com/xetys/hetzner-kube/cluster"
+	"github.com/xetys/hetzner-kube/pkg/cluster2"
 	"github.com/xetys/hetzner-kube/types"
 	"gopkg.in/yaml.v3"
 	"os"
@@ -35,7 +36,7 @@ func main() {
 	getCLusterFlags := GetGenericFlag{}
 	getCluster.AddFlags(&getCLusterFlags)
 	getCluster.Action(func() error {
-		cluster.GetCluster(getCLusterFlags.Name)
+		cluster2.GetCluster(getCLusterFlags.Name)
 		return nil
 	})
 

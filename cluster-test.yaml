@@ -6,6 +6,8 @@
   "ssh-key-name": "k8s"
 
 "spec":
+  "network":
+    "cidr": "10.0.0.0/16"
   "nodes":
     "master":
       "replicas": 1
@@ -13,7 +15,7 @@
       "image": "ubuntu-24.04"
       "dataCenters": ["nbg1-dc3"]
     "worker":
-      "replicas": 3
+      "replicas": 1
       "type": "cx22"
-      "image": "ubuntu-22.04"
+      "image": "ubuntu-24.04"
       "dataCenters": [ "nbg1-dc3" ]

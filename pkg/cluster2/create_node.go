@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/xetys/hetzner-kube/pkg/clustermanager"
+	"github.com/xetys/hetzner-kube/pkg/hetzner"
 	"github.com/xetys/hetzner-kube/types"
 	"path/filepath"
 	"time"
 )
 
-func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig) (clustermanager.Node, error) {
+func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.ProviderNodeTemplate) (clustermanager.Node, error) {
 	sshClient := clustermanager.NewSSHCommunicator([]clustermanager.SSHKey{
 		{
 			Name:           c.Config.Metadata.Name,
@@ -19,13 +20,24 @@ func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig)
 		},
 	}, false)
 
+	nodeTemplate.SSHKeyName = c.Config.Metadata.Name //FIXME
 	err := sshClient.(*clustermanager.SSHCommunicator).CapturePassphrase(c.Config.Metadata.Name)
 	if err != nil {
 		return clustermanager.Node{}, err
 	}
 
-	nodeTemplate.CloudInit.AddRunCmd("touch /tmp/hetzner-kube.unlock")
+	nodes, err := c.provider.GetAllNodes2(ctx, hetzner.Selector{
+		Labels: map[string]string{
+			types.ClusterNameLabel: c.Config.Metadata.Name,
+			types.ClusterRoleLabel: nodeTemplate.Labels[types.ClusterRoleLabel],
+		},
+	})
+	if err != nil {
+		return clustermanager.Node{}, err
+	}
 
+	nodeTemplate.CloudInit.AddRunCmd("touch /tmp/hetzner-kube.unlock")
+	nodeTemplate.Name = fmt.Sprintf("%s-%s-%d", c.Config.Metadata.Name, nodeTemplate.Role, len(nodes))
 	node, err := c.provider.CreateNode2(ctx, nodeTemplate)
 	if err != nil {
 		return clustermanager.Node{}, err
@@ -45,26 +57,19 @@ func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig)
 			return clustermanager.Node{}, errors.New("cloud init deadline excited")
 		}
 
-		_, err := sshClient.RunCmd(node, "[ -f /tmp/hetzner-kube.unlock ]")
+		data, err := sshClient.RunCmd(node, "[ -f /tmp/hetzner-kube.unlock ]")
 		if err == nil {
 			fmt.Printf("\ncloud init complete with time: %d seconds\n", t.Second())
 			break
 		}
 
+		println(data)
 		counter++
 		print(fmt.Sprintf("...%ds", int(tick.Seconds())*counter))
 		time.Sleep(tick)
 	}
 
-	commands := []string{
-		`kubeadm init`,
-		`mkdir -p $HOME/.kube`,
-		`sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config`,
-		`sudo chown $(id -u):$(id -g) $HOME/.kube/config`,
-		`kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml`,
-	}
-
-	for _, command := range commands {
+	for _, command := range nodeTemplate.Commands {
 		println("executing: ", command)
 		data, err := sshClient.RunCmd(node, command)
 		if err != nil {
@@ -74,5 +79,6 @@ func (c *Cluster) createNode(ctx context.Context, nodeTemplate types.NodeConfig)
 
 		println(data)
 	}
-	return clustermanager.Node{}, nil
+
+	return node, nil
 }

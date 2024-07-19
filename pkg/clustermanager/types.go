@@ -12,7 +12,7 @@ type Node struct {
 	IsMaster         bool      `json:"is_master"`
 	IsEtcd           bool      `json:"is_etcd"`
 	IPAddress        string    `json:"ip_address"`
-	PrivateIPAddress string    `json:"private_ip_address"`
+	PrivateIPAddress string    `json:"private_ip_address"` // TODO Use IP
 	SSHKeyName       string    `json:"ssh_key_name"`
 	WireGuardKeyPair WgKeyPair `json:"wire_guard_key_pair"`
 }

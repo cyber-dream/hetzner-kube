@@ -44,94 +44,10 @@ This tool supports these levels of kubernetes HA:
 func RunClusterCreate(inConfig types.ClusterConfig) error {
 	//TODO check exists clusters
 	ctx := context.Background()
-	//workerCount /*, _ */ := 1 //cmd.Flags().GetInt("worker-count")
-	//masterCount /*, _ */ := 1 //cmd.Flags().GetInt("master-count")
-	//etcdCount := 0
-	//haEnabled := false //, _ := cmd.Flags().GetBool("ha-enabled")
-	//if !haEnabled {
-	//	masterCount = 1
-	//}
-	//isolatedEtcd /*, _ */ := false //cmd.Flags().GetBool("isolated-etcd")
-	//if isolatedEtcd {
-	//	etcdCount, _ = cmd.Flags().GetInt("etcd-count")
-	//}
-	//debug /*, _*/ := false //cmd.Flags().GetBool("debug")
 
 	if inConfig.Metadata.Name == "" {
 		inConfig.Metadata.Name = randomName()
 	}
-	//clusterName :=  randomName()
-	//if name, _ := cmd.Flags().GetString("name"); name != "" {
-	//	clusterName = name
-	//}
-
-	//log.Printf("Creating new cluster\n\nNAME:%s\nMASTERS: %d\nWORKERS: %d\nETCD NODES: %d\nHA: %t\nISOLATED ETCD: %t", clusterName, masterCount, workerCount, etcdCount, haEnabled, isolatedEtcd)
-
-	//sshKeyName := "k8s" //, _ := cmd.Flags().GetString("ssh-key")
-	//masterServerType, _ := cmd.Flags().GetString("master-server-type")
-	//workerServerType, _ := cmd.Flags().GetString("worker-server-type")
-	//datacenters, _ := cmd.Flags().GetStringSlice("datacenters")
-	//nodeCidr := "" //, _ := cmd.Flags().GetString("node-cidr")
-	//cloudInit, _ := cmd.Flags().GetString("cloud-init")
-	//cloudInitBytes, err := os.ReadFile("./cloud-init.yaml")
-	//if err != nil {
-	//	return err
-	//}
-
-	//clusterParams := clustermanager.Cluster{
-	//	Name:         clusterName,
-	//	NodeCIDR:     "10.0.1.0/24",
-	//	MastersCount: masterCount,
-	//	SSHKeyName:   sshKeyName,
-	//
-	//	MasterTemplate: clustermanager.NodeTemplate{
-	//		ServerType:  "cax11",
-	//		Image:       "ubuntu-24.04",
-	//		CloudInit:   string(cloudInitBytes),
-	//		DataCenters: []string{"nbg1-dc3"}, //FIXME
-	//	},
-	//
-	//	WorkerTemplate: clustermanager.NodeTemplate{
-	//		ServerType:  "cax11",
-	//		Image:       "ubuntu-24.04",
-	//		CloudInit:   string(cloudInitBytes),
-	//		DataCenters: []string{"nbg1-dc3"}, //FIXME
-	//	}}
-
-	//newConf := appconf.GetConfig()
-	AppConf = NewAppConfig(false)
-
-	//FIXME
-	//if haEnabled && isolatedEtcd {
-	//	if _, err := hetznerProvider.CreateEtcdNodes(sshKeyName, masterServerType, datacenters, etcdCount); err != nil {
-	//		log.Println(err)
-	//	}
-	//}
-
-	//_, err = hetznerProvider.CreateNode(
-	//	types.MasterNodeRole,
-	//	clusterParams.MasterTemplate,
-	//	clusterParams.MastersCount,
-	//	0)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//if hetznerProvider.MustWait() {
-	//	log.Println("sleep for 10s...")
-	//	time.Sleep(10 * time.Second)
-	//}
-
-	//coordinator := pkg.NewProgressCoordinator()
-
-	//sshClient := clustermanager.NewSSHCommunicator(AppConf.Config.SSHKeys, false)
-	//err = sshClient.(*clustermanager.SSHCommunicator).CapturePassphrase(sshKeyName)
-	//FatalOnError(err)
-
-	//c, err := appconf.GetConfig("pipa")
-	//if err != nil {
-	//	return err
-	//}
 
 	newCluster, err := cluster2.CreateNewCluster(ctx, inConfig)
 	if err != nil {
@@ -139,32 +55,9 @@ func RunClusterCreate(inConfig types.ClusterConfig) error {
 	}
 
 	_ = newCluster
-	//err = appconf.SaveConfig(newCluster.Config)
-	//if err != nil {
-	//	return err
-	//}
 
-	////saveCluster(&cluster)
-	//renderProgressBars(&cluster, coordinator)
-	////
-	//phaseChain := phases.NewPhaseChain()
-	////
-	//phaseChain.AddPhase(phases.NewProvisionNodesPhase(clusterManager))
-	//phaseChain.AddPhase(phases.NewNetworkSetupPhase(clusterManager))
-	//phaseChain.AddPhase(phases.NewEtcdSetupPhase(clusterManager, hetznerProvider, phases.EtcdSetupPhaseOptions{KeepData: false}))
-	//phaseChain.AddPhase(phases.NewInstallMastersPhase(clusterManager, phases.InstallMastersPhaseOptions{KeepCaCerts: false, KeepAllCerts: false}))
-	//phaseChain.AddPhase(phases.NewSetupHighAvailabilityPhase(clusterManager))
-	//phaseChain.AddPhase(phases.NewInstallWorkersPhase(clusterManager))
-	//phaseChain.SetAfterRun(func() {
-	//	saveCluster(&cluster)
-	//})
-	//
-	//err = phaseChain.Run()
-	FatalOnError(err)
-	//
-	//coordinator.Wait()
 	log.Println("Cluster successfully created!")
-	return nil
+	return err
 }
 
 func saveCluster(cluster *clustermanager.Cluster) {
