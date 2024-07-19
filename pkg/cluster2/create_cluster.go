@@ -23,13 +23,18 @@ func CreateNewCluster(ctx context.Context, config types.ClusterConfig) (*Cluster
 	hetznerProvider := hetzner.NewHetznerProvider2(ctx, apiToken, config.Metadata.Name)
 
 	// Create cluster stuff on Hetzner
-	_, ipNet, err := net.ParseCIDR(config.Spec.Network.Cidr)
+	//_, ipNet, err := net.ParseCIDR(config.Spec.Network.Cidr)
 	//_, ipNet, err := net.ParseCIDR("10.244.0.0/16") //FIXME Hardcoded. Default cidr in Flannel, should edit flannel.yaml to override or edit .env on nodes
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	_, hetznerIpNet, err := net.ParseCIDR(config.Spec.Network.HetznerCidr)
 	if err != nil {
 		return nil, err
 	}
 
-	network, err := hetznerProvider.CreateNetwork(ctx, config.Metadata.Name, ipNet)
+	network, err := hetznerProvider.CreateNetwork(ctx, config.Metadata.Name, hetznerIpNet)
 	if err != nil {
 		return nil, err
 	}
@@ -64,30 +69,10 @@ func CreateNewCluster(ctx context.Context, config types.ClusterConfig) (*Cluster
 	masterTemplate.Labels[types.ClusterNameLabel] = config.Metadata.Name
 	masterTemplate.Labels[types.ClusterRoleLabel] = string(types.MasterNodeRole)
 
-	//err = masterCloudInit(masterTemplate.CloudInit)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	//Post-init ssh commands
-	//masterTemplate.Commands = []string{
-	//	fmt.Sprintf(`kubeadm init --pod-network-cidr=%s --apiserver-advertise-address=%s`, ipNet.String()),
-	//	`mkdir -p $HOME/.kube`,
-	//	`sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config`,
-	//	`sudo chown $(id -u):$(id -g) $HOME/.kube/config`,
-	//	`kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml`,
-	//}
-
 	// Networks
 	masterTemplate.Networks = []*hcloud.Network{network}
-	//var templates []types.ProviderNodeTemplate
-
-	//for range config.Spec.Nodes.Master.Replicas {
-	//	templates = append(templates, masterTemplate)
-	//}
 
 	// Create Worker Nodes
-
 	workerTemplate, err := types.NewProviderNodeTemplate(config.Metadata.Name, config.Spec.Nodes.Worker, types.WorkerNodeRole)
 	if err != nil {
 		return nil, err
@@ -122,18 +107,45 @@ func CreateNewCluster(ctx context.Context, config types.ClusterConfig) (*Cluster
 		return nil, err
 	}
 
-	for _, node := range masterNodes {
+	//maskInt, _ := ipNet.Mask.Size()
+	//hosts, _, err := getAllHosts(ip, *ipNet)
+	//if err != nil {
+	//	return nil, err
+	//}
 
+	//flannelNetConf, err := json.Marshal(types.FlannelNetConf{
+	//	Network:   ipNet.IP.String(),
+	//	SubnetLen: maskInt,
+	//	SubnetMin: hosts[1], //hosts[0] used by hetzner router
+	//	SubnetMax: hosts[len(hosts)-1],
+	//	Backend: types.FlannelBackendConf{
+	//		Type: "udp",
+	//		Port: 7890,
+	//	},
+	//})
+
+	//	flannelRunConf := fmt.Sprintf(
+	//		`FLANNEL_NETWORK=%s
+	//FLANNEL_SUBNET=%s
+	//FLANNEL_MTU=1450
+	//FLANNEL_IPMASQ=true`, ipNet.String(), ipNet.String())
+
+	_, flannelCidr, err := net.ParseCIDR(config.Spec.Network.HetznerCidr)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, node := range masterNodes {
+		//TODO --control-plane-endpoint
 		commands := []string{
-			fmt.Sprintf(`kubeadm init --pod-network-cidr=%s --apiserver-advertise-address=%s`, ipNet.String(), node.PrivateIPAddress),
+			fmt.Sprintf(`kubeadm init --pod-network-cidr=%s --apiserver-advertise-address=%s`, flannelCidr.String(), node.PrivateIPAddress),
 			`mkdir -p $HOME/.kube`,
 			`sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config`,
 			`sudo chown $(id -u):$(id -g) $HOME/.kube/config`,
-			//`kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml`,
-			`kubectl create ns kube-flannel`,
-			`kubectl label --overwrite ns kube-flannel pod-security.kubernetes.io/enforce=privileged`,
-			`helm repo add flannel https://flannel-io.github.io/flannel/`,
-			fmt.Sprintf(`helm install flannel --set podCidr="%s" --namespace kube-flannel flannel/flannel`, ipNet.String()),
+			//fmt.Sprintf(`echo "%s" >> /etc/kube-flannel/net-conf.json`, flannelNetConf),
+			//`mkdir /run/flannel/`,
+			//fmt.Sprintf(`echo "%s" >> /run/flannel/subnet.env`, flannelRunConf),
+			`kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml`,
 		}
 
 		for _, command := range commands {
@@ -187,4 +199,31 @@ func CreateNewCluster(ctx context.Context, config types.ClusterConfig) (*Cluster
 	}
 
 	return &newCluster, nil
+}
+
+func getAllHosts(ip net.IP, ipNet net.IPNet) ([]string, int, error) {
+
+	var ips []string
+	for ip := ip.Mask(ipNet.Mask); ipNet.Contains(ip); inc(ip) {
+		ips = append(ips, ip.String())
+	}
+
+	// remove network address and broadcast address
+	lenIPs := len(ips)
+	switch {
+	case lenIPs < 2:
+		return ips, lenIPs, nil
+
+	default:
+		return ips[1 : len(ips)-1], lenIPs - 2, nil
+	}
+}
+
+func inc(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		ip[j]++
+		if ip[j] > 0 {
+			break
+		}
+	}
 }

@@ -44,7 +44,8 @@ type ClusterConfig struct {
 	} `yaml:"nodes-control"`
 	Spec struct {
 		Network struct {
-			Cidr string `yaml:"cidr"`
+			HetznerCidr string `yaml:"hetzner-cidr"`
+			FlannelCidr string `yaml:"flannel-cidr"`
 		} `yaml:"network"`
 		Nodes struct {
 			Master ProviderNodeConfig  `yaml:"master"`
@@ -124,15 +125,6 @@ func NewProviderNodeTemplate(clusterName string, inConfig ProviderNodeConfig, in
 	}
 	ci.AddPackageSource(*repoK8S)
 
-	repoHelm, err := getSignedRepo(
-		"Helm Repo",
-		"https://baltocdn.com/helm/signing.asc",
-		"deb [signed-by=$KEY_FILE] https://baltocdn.com/helm/stable/debian/ all main")
-	if err != nil {
-		return ProviderNodeTemplate{}, err
-	}
-	ci.AddPackageSource(*repoHelm)
-
 	ci.SetSystemUpdate(true)
 	ci.SetSystemUpgrade(true)
 
@@ -144,12 +136,26 @@ func NewProviderNodeTemplate(clusterName string, inConfig ProviderNodeConfig, in
 	ci.AddPackage("kubelet")
 	ci.AddPackage("kubeadm")
 	ci.AddPackage("kubectl")
-	ci.AddPackage("helm")
-
-	ci.AddRunCmd(`swapoff -a`)
-	ci.AddRunCmd(`sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab`)
 
 	ci.AddRunCmd(`apt-mark hold kubelet kubeadm kubectl`)
+
+	ci.AddRunCmd(`swapoff -a`)
+	//ci.AddRunCmd(`sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab`)
+	ci.AddRunCmd(`modprobe overlay -v`)
+	ci.AddRunCmd(`modprobe br_netfilter -v`)
+
+	ci.AddRunCmd(`echo "overlay" >> /etc/modules`)
+	ci.AddRunCmd(`echo "br_netfilter" >> /etc/modules`)
+
+	ci.AddRunCmd(`echo 1 > /proc/sys/net/ipv4/ip_forward`)
+
+	//ci.AddRunCmd(`sudo ufw disable`)
+	//ci.AddRunCmd(`service apparmor stop`)
+	//ci.AddRunCmd(`service apparmor teardown`)
+	//ci.AddRunCmd(`/usr/sbin/update-rc.d -f apparmor remove`)
+
+	//ci.AddRunCmd(`echo "net.ipv4.ip_forward = 1" | sudo tee -a /etc/sysctl.conf`)
+	ci.AddRunCmd(`sudo sysctl -p`)
 
 	return ProviderNodeTemplate{
 		ProviderNodeConfig: inConfig,
